@@ -1,5 +1,10 @@
+Curso de Introducción al Desarrollo Blockchain: Smart Contracts
+Memory, Storage y Call Data
+Reto #1
 
-
+- Crear un contrato y agregar variables de estado
+- Crear una función fundProyect que permita enviar Ether a un proyecto
+- Crea una función changeProjectState que permita cambiar el estado de un proyecto
 
 // SPDX-License-Identifier: GPL-3.0
  pragma solidity >=0.7.0 <0.9.0;
@@ -53,3 +58,6 @@
      }
      
  }
+
+
+El código es tomado de una solución de un compañero con algunas modificaciones que considero correctas
