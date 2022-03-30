@@ -1,63 +1,129 @@
 Curso de Introducción al Desarrollo Blockchain: Smart Contracts
-Memory, Storage y Call Data
-Reto #1
-
-- Crear un contrato y agregar variables de estado
-- Crear una función fundProyect que permita enviar Ether a un proyecto
-- Crea una función changeProjectState que permita cambiar el estado de un proyecto
+Reto Final
 
 // SPDX-License-Identifier: GPL-3.0
- pragma solidity >=0.7.0 <0.9.0;
+pragma solidity >=0.7.0 <0.9.0;
  
- contract Reto1{
-     //Variables de estado
-     bool public isFundable;
-     uint256 public Goal; 
-     uint256 public totalFunded;
-     address owner;
-     
-     //Inicializamos los valores, hay que recordar que el constructor se ejecuta solo una vez cuando se crea el contrato
-     //Asignamos la meta al construir el contrato
-     constructor(uint _goal){
-         Goal = _goal;
-         owner = msg.sender;
-         totalFunded = 0;
-         isFundable = true;
-     }
-     //El modifier permite cambiar el compoprtamiento de funciones, en este caso solo queria asegurarme que solo el creador del contrato pudiera mover el Goal
-     modifier onlyOwner{
-         require(msg.sender == owner, "Debes ser el creador del contrato para cambiar la meta o el estado del proyecto");
-         _;
-     }
-     //Aqui ponemos la meta a recaudar,solamente el que iniciaiza el contrato puede cambiar este valor
-     function setGoal(uint256 goal) public onlyOwner {
-         Goal = goal;
-     }
-     
-     //solo el dueño del contrato puede modificar el estado del proyecto
-     function changeProjectState(bool change)public onlyOwner{
-         isFundable = change;
-     }
-     //Aqui inicia la funcion para fondear el proyecto
-     function fundproject() public payable {
-         //Primero evaluamos si el estado del contrato se mantiene abierto a las donaciones
-         require(isFundable, "El proyecto esta cerrado para donaciones");
-         //Comprobamos que el total que se ha fondeado sea menor a la meta
-         require(totalFunded < Goal, "La meta ha sido alcanzada y no se puede fondear mas");
-         //Despues nos aeguramos que la persona mande un minimo,en este caso arriba de 0
-         require(msg.value != uint(0), "Por favor agrega mas fondos para contribuir al proyecto de Platzi");
-         //Actualizamos el total que se ha fondeado al contrato
-         totalFunded += msg.value;
-         //Si el total fondeado supera a la meta el estado del proyecto cambia y se cierra
-         if(totalFunded >= Goal)
-            isFundable = false;
-     }
-     //Esta funcion nos sirve para que la persona pueda ver cuanto se necesita para alcanzar la meta, asi no tendra que estar adivinando cuanto depositar maximo
-     function viewRemaining() public view returns(uint256){
-         return Goal - totalFunded;         
-     }
+contract CrowdFunding{
+    //Enum sobre el estado del proyecto
+    enum Estado {
+        Active,
+        Inactive
+    }
+
+    //Estructura del proyecto
+    struct project{
+        uint id;
+        string name;
+        Estado state;
+        uint256  Goal; 
+        uint256  totalFunded;                
+    }
+
+    //estructura para guardar todas las contribuciones (fondeos)
+    struct Contribution{
+        address contributor;
+        uint value;
+    }
+
+    // variables de estado
+    address payable owner;
+    project[] public platziProjects;
+    mapping (uint => Contribution[]) public contributions;
+
+    //Asignamos los parametros base del proyecto al construir el contrato
+    constructor(uint _id, string memory _name, uint _goal, Estado _state){ 
+        require(_goal >= 0, "La meta de los fondos debe ser mayor a cero");
+        project memory proj = project(_id, _name, _state, _goal, 0);
+        platziProjects.push(proj);
+        owner = payable(msg.sender);
+    }
+
+    //Solo el creador del contrato puede editar la meta o el estado del proyecto
+    modifier onlyOwner{
+        require(msg.sender == owner, "Debes ser el creador del contrato para cambiar la meta o el estado del proyecto");
+        _;
+    }
+
+    //modificador para no permitir que el mismo dueño del contrato se envie fondos a el mismo
+    modifier noOwner{
+        require(msg.sender != owner, "El creador del contrato no puede enviarse fondos el mismo");
+        _;
+    }
+
+    //Evento para mostrar cuando se hace un envío de fondos
+    event sendFunds(
+        address fromAddress,
+        uint    newFund,
+        uint    totalFunds
+    );
+
+    //Evento para mostrar el cambio de estado
+    event changeState(
+        Estado newState
+    );
+
+    //evento para mostrar cuando se crea un proyecto
+    event projectCreated(
+        uint id,
+        string name,
+        Estado state,
+        uint256  Goal, 
+        uint256  totalFunded 
+    );
+
+    //Se crea un proyecto solo por el dueño del contrato y se le asignan los parámetros
+    function createProject(uint _id, string memory _name, uint _goal, Estado _state) public onlyOwner{
+        require(_goal >= 0, "La meta de los fondos debe ser mayor a cero");
+        project memory proj = project(_id, _name, _state, _goal, 0);
+        platziProjects.push(proj);
+        emit projectCreated(_id, _name, _state, _goal, 0);
+    }
+
+    //Aqui ponemos la meta a recaudar,solamente el que iniciaiza el contrato puede cambiar este valor
+    function setGoal(uint projectIndex, uint256 goal) public view onlyOwner {
+        project memory proj = platziProjects[projectIndex];
+        proj.Goal = goal;
+    }
+    
+    //solo el dueño del contrato puede modificar el estado del proyecto
+    function changeProjectState(uint projectIndex, Estado change)public onlyOwner{
+        project memory proj = platziProjects[projectIndex];
+        require(proj.state != change, "El estado del proyecto no puede ser el mismo");
+        proj.state = change;
+        emit changeState(proj.state);
+    }
+
+    //Aqui inicia la funcion para fondear el proyecto
+    function fundProject(uint projectIndex) public payable noOwner {
+        //se busca el proyecto
+        project memory proj = platziProjects[projectIndex];
+        //Primero evaluamos si el estado del contrato se mantiene abierto a las donaciones
+        require(proj.state != Estado.Inactive, "El proyecto esta cerrado para donaciones");
+        //Comprobamos que el total que se ha fondeado sea menor a la meta
+        require(proj.totalFunded < proj.Goal, "La meta ha sido alcanzada y no se puede fondear mas");
+        //Despues nos aeguramos que la persona mande un minimo,en este caso arriba de 0
+        require(msg.value > uint(0), "Por favor agrega mas fondos para contribuir al proyecto de Platzi");
+        //Se transfieren la donacion
+        owner.transfer(msg.value);
+        //Actualizamos el total que se ha fondeado al contrato
+        proj.totalFunded += msg.value;
+        //se manda evento
+        emit sendFunds(msg.sender, msg.value, proj.totalFunded);
+        //Si el total fondeado supera a la meta el estado del proyecto cambia y se cierra
+        if(proj.totalFunded >= proj.Goal)
+        {
+            proj.state = Estado.Inactive;    
+            emit changeState(proj.state);
+        }
+        //se guarda direccion y cantidad de la contribucion
+        contributions[proj.id].push(Contribution(msg.sender, msg.value));
+    }
+    //Esta funcion nos sirve para que la persona pueda ver cuanto se necesita para alcanzar la meta, asi no tendra que estar adivinando cuanto depositar maximo
+    function viewRemaining(uint projectIndex) public view returns(uint256){
+        //se busca el proyecto
+        project memory proj = platziProjects[projectIndex];
+        return proj.Goal - proj.totalFunded;         
+    }
      
  }
-
-
-El código es tomado de una solución de un compañero con algunas modificaciones que considero correctas
